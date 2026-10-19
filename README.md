@@ -15,7 +15,7 @@
 
 ## 快速开始
 
-1. **安装**：市场里点安装，或把 `bilibili_sharer-1.2.0.mfp` 放进 `plugins/` 目录
+1. **安装**：市场里点安装，或把 `bilibili_sharer-1.2.1.mfp` 放进 `plugins/` 目录
 2. **配置目标**：编辑 `config/plugins/bilibili_sharer/config.toml`，在 `[[sender.targets]]` 里填 `type`（`group`/`private`）与 `id`（群号/QQ 号）
 3. **重启 Bot**（插件与配置都不热加载）
 
@@ -86,6 +86,10 @@ interests = ["游戏", "科技"]
 | [完整变更记录](docs/changelog-full.md) | 历史版本全部条目 |
 
 ## 变更记录
+
+### v1.2.1（2026-10-19）
+
+- 文档整理：README 精简到百来行，实现细节拆到 `docs/`（工作原理、被动链路、配置参考、迁移、完整变更）。无功能改动。
 
 ### v1.2.0（2026-10-19）
 
