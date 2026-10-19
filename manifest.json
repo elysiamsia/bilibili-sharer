@@ -1,0 +1,52 @@
+{
+  "name": "bilibili_sharer",
+  "display_name": "Bilibili 分享",
+  "version": "1.2.0",
+  "description": "自动分享 Bilibili 视频到配置的目标（platform 默认 qq），基于人设过滤，各目标独立定时器，内置 B站视频素材读取（字幕/弹幕/评论）与搜索原生工具；支持被动收链接自动发送视频与点评（默认关闭）",
+  "author": "elysiamsia",
+  "dependencies": {
+    "plugins": [],
+    "components": []
+  },
+  "include": [
+    {
+      "component_type": "tool",
+      "component_name": "bili_video_material",
+      "dependencies": [],
+      "enabled": true
+    },
+    {
+      "component_type": "tool",
+      "component_name": "bili_search_videos",
+      "dependencies": [],
+      "enabled": true
+    },
+    {
+      "component_type": "tool",
+      "component_name": "bili_send_video",
+      "dependencies": [],
+      "enabled": true
+    },
+    {
+      "component_type": "event_handler",
+      "component_name": "bili_sharer_reactive",
+      "dependencies": [],
+      "enabled": true
+    }
+  ],
+  "entry_point": "plugin.py",
+  "min_core_version": "1.0.0",
+  "api_version": {
+    "llm_api": "1.1.0",
+    "log_api": "1.0.0",
+    "send_api": "1.1.0",
+    "stream_api": "2.0.0",
+    "event_api": "1.1.0",
+    "storage_api": "1.0.0",
+    "plugin_api": "1.0.0"
+  },
+  "python_dependencies": [
+    "bilibili-api-python>=17.4.1"
+  ],
+  "dependencies_required": false
+}
