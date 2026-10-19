@@ -4,6 +4,27 @@
   "version": "1.2.0",
   "description": "自动分享 Bilibili 视频到配置的目标（platform 默认 qq），基于人设过滤，各目标独立定时器，内置 B站视频素材读取（字幕/弹幕/评论）与搜索原生工具；支持被动收链接自动发送视频与点评（默认关闭）",
   "author": "elysiamsia",
+  "license": "MIT",
+  "homepage": "https://github.com/elysiamsia/bilibili-sharer",
+  "categories": [
+    "fun",
+    "information"
+  ],
+  "tags": [
+    "bilibili",
+    "video",
+    "share",
+    "asr",
+    "persona-filter",
+    "qq"
+  ],
+  "keywords": [
+    "B站",
+    "视频分享",
+    "人设过滤",
+    "语音转写",
+    "自动发视频"
+  ],
   "dependencies": {
     "plugins": [],
     "components": []
