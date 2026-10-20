@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 *.pyo
 .DS_Store
+# 本地调试/部署脚本（不属于插件本体）
+.devtests/
+.pytest_cache/
