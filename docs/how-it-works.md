@@ -59,18 +59,19 @@
 
 ### 推送自发视频（`[video_send].push_enabled`，默认开）
 
-- **关（默认）**：完全维持现状——文字发出后发布合成消息事件（`message_id` 前缀 `bili_sharer_`），由 parser 识别链接并下载 / 发送视频。
-- **开**：**不再发布合成事件**（避免与 parser 双发）；链接消息送达后，自研下载该视频（DASH 双流 + ffmpeg 合流，全局并发上限 2）并 `send_file` 直发文件，产物发完即删。兜底超时 **900 秒**；**任何失败只记日志**——链接消息已发出这一事实不受影响，该视频也不会因此误入失败集合（结果是「只有链接、没有视频文件」）。
+- **开（默认）**：**不再发布合成事件**（避免与 parser 双发）；链接消息送达后，自研下载该视频（DASH 双流 + ffmpeg 合流，全局并发上限 2）并 `send_file` 直发文件，产物发完即删。兜底超时 **900 秒**；**任何失败只记日志**——链接消息已发出这一事实不受影响，该视频也不会因此误入失败集合（结果是「只有链接、没有视频文件」）。
+- **关**：完全维持现状——文字发出后发布合成消息事件（`message_id` 前缀 `bili_sharer_`），由 parser 识别链接并下载 / 发送视频；没装 parser 时就是「只有链接」。
 
 ### 发送
 
 - `send_text` 发送到目标 stream，stream 由 `get_or_create_stream` 按 `target.platform` 自动创建
+- stream 建不出来（平台名写错 / 适配器没接）→ 这一条**不标记已看**、记入该目标的失败集合，下个视频发送成功后失败集合整体清空，它还会再来一次；不会出现「没发出去却被永远当成已发」
 - 发送失败 → 该视频记入本目标的失败集合（**仅内存**，重启后清空）；**下次成功发送前不再重试**——失败 bvid 被持续排除，该目标一旦发送成功，失败集合整体清空
 
 ### 状态持久化
 
 - **Raw Pool** 与各目标状态（`last_send_time` / `next_send_time` / `sent_bvids`）经框架 JSON Storage API 落盘，重启后恢复
-- 每个目标的已看历史最多保留 **1000** 条 bvid（超出时截取其中 1000 条，**非严格最旧**——`sent_bvids` 由集合转列表后取末尾 1000 条）
+- 每个目标的已看历史最多保留 **1000** 条 bvid；超出时淘汰**最旧的**（按发送顺序排队，最近发过的不会被挤掉）
 
 ---
 
@@ -82,16 +83,18 @@ B 站视频下载 / 合流（被动发视频与推送自发视频共用）：
 - **体积预算**按「**视频流 + 音频流合并总大小**」计：`max_size_mb`（默认 200 MB），任一流越限即拒并删除半截文件，合流后再做一次总大小兜底校验；`max_size_mb <= 0` 视为**不限制**。
 - **时长上限**独立检查：`max_minute`（默认 30 分钟），在取播放地址前判断；`max_minute <= 0` 视为不限制。
 - **画质**：`video_quality`（默认 `"720P"`，非法值回退 720P）为请求上限；请求档拿不到时**就近降级**取 ≤ 请求档的最高可用流且不失败；**AVC 优先**（无 AVC 才回退其它编码），HDR / 杜比一律排除。
-- **失败契约**：链接无法识别 / 无 ffmpeg / 分 P 越界 / 超时长 / 超预算 / 非 DASH 流 / 传输层或磁盘异常 / ffmpeg 合流失败——一律抛 `BiliDownloadError` 并清理半截文件；调用方（推送 / 被动）只记日志，链式降级为「只发链接 / 不发视频」。
+- **失败契约**：链接无法识别 / 分 P 越界 / 超时长 / 超预算 / 非 DASH 流 / 传输层或磁盘异常 / ffmpeg 合流失败——一律抛 `BiliDownloadError` 并清理半截文件；调用方（推送 / 被动）只记日志，链式降级为「只发链接 / 不发视频」。
+- **没 ffmpeg 也能发**：优先走 DASH 双流 + 合流；找不到 ffmpeg 时自动改用 B 站的「单文件流」（`durl`，音视频合一、无需合流，**匿名**请求才拿得到，通常 360P/480P）。视频不提供单文件流时才抛错并提示装 ffmpeg（或装 parser 借它捆绑的那份）。
 - **产物目录**：`data/bilibili_sharer/cache/`（本插件自建）；发送后删除（`delete_after=True`），只动自己的文件。
 - **全局并发**：`asyncio.Semaphore(2)`，推送与被动两条链路共用。
 
-### ffmpeg 解析顺序（三级回退）
+### ffmpeg 解析顺序（四级回退）
 
 1. `[video_send].ffmpeg_path` 配置值——支持 `%VAR%` 环境变量展开与去引号；写成裸命令名时走 PATH 查找；路径无效时记 warning 并**继续回退**下一级。
 2. 系统 PATH——`shutil.which("ffmpeg")`。
-3. parser 捆绑二进制——运行时 `plugin_api.get_plugin_path("parser")` + `bin/ffmpeg.exe`（只借二进制路径，不 import 其代码；parser 缺席只是少一级候选，不报错）。
+3. 常见安装位置——`~/.local/bin`、`~/scoop/shims`、`%LOCALAPPDATA%\Microsoft\WinGet\Links`、`%LOCALAPPDATA%\ffmpeg\bin`、`%ProgramData%\chocolatey\bin`、`C:\ffmpeg\bin`（Bot 从计划任务 / 服务启动时 PATH 往往比终端短，装在这些目录也不至于找不到）。
+4. parser 捆绑二进制——运行时 `plugin_api.get_plugin_path("parser")` + `bin/ffmpeg.exe`（只借二进制路径，不 import 其代码；parser 缺席只是少一级候选，不报错）。
 
-三级都拿不到 → 下载抛 `BiliDownloadError`（提示补配 `ffmpeg_path` / 装 PATH / 启用 parser），表现为「只发链接、没有视频」。
+四级都拿不到 → **不报错**，改用单文件流（见上）；只有连单文件流都没有时才抛 `BiliDownloadError`，表现为「只发链接、没有视频」。
 
 ---

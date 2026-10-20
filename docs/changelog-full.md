@@ -3,17 +3,32 @@
 > 历史版本的全部条目。
 
 
-### 未发布（开发中；manifest 版本仍为 1.1.0）
+### v1.2.3（2026-10-20）
 
-- **`[persona]` 默认复用 bot 全局人格**：新增七个与 `config/core.toml` `[personality]` 同名的字段（`nickname` / `alias_names` / `personality_core` / `personality_side` / `identity` / `background_story` / `reply_style`，默认全空＝复用），由新文件 `services/persona.py::compose_persona` 组装成人设文本；原 `persona` 字段改为**额外补充说明**（默认空，非空追加在组装结果最后）。推送链路的批量人设过滤与推荐语（simple / deep）、被动链路的自动点评都改用这份组装结果；核心配置不可用时只用插件自己的值，不抛异常。
-- **全部配置字段说明改写为小白友好版**（`config.py` 的 Field description 与节说明）：逐条说清「这个开关干什么」「改了会怎样」「默认为什么是这样」；字段名 / 类型 / 默认值 / 校验一律未动。
+- **修复（重要）：`plugin.py` 被截断，定时推送从未启动**：入口文件少了 builder / 调度器的创建与 `start()`，也少了 `on_plugin_unloaded`。插件加载成功、日志正常，但 `fetch_loop` / `send_loop` 根本没跑——只剩群友发链接的被动链路在工作。已按设计补回完整接线（记账本 → 抓取 → 筛选 → 排版 → 调度器 start），并补回卸载时的 `scheduler.stop()`。
+- **修复：stream 不可用时视频被永久标记已发送**：`_try_send` 在 `_send_to_target` 返回 `None`（拿不到 stream）后仍调用 `mark_as_sent`，这条视频对那个目标从此沉默。现在改为记入该目标的失败名单、不标记已看；通道恢复后下一个视频发送成功即整体清空名单。
+- **修复：`bili_send_video` 工具下载时忽略凭据**：工具把 `cfg.video_send` 而不是整份配置递给下载器，`[bili_credential]` 永远读不到，登录可见的画质被匿名降级。现在传整份配置。
+- **改进：已发送历史确定性淘汰**：`sent_bvids` 改为有序列表追加，超过 1000 条淘汰最旧的一条（原来集合转列表后随机砍，可能丢掉刚发过的视频导致重复推送）。
+- 新增仓库内自检：`tests/` 静态契约（manifest `include` 与 `get_components` 一致、入口接线、配置节、版本一致性）+ 纯函数/状态单测；GitHub Actions 每次 push 跑一遍。**这类自检会在发布前抓住「文件截断」**。
+
+### v1.2.2（2026-10-20）
+
+- **没有 ffmpeg 也能发视频**：DASH 合流不可用时改用 B 站「单文件流」（`durl`，音视频合一；匿名请求才拿得到，通常 360P/480P），不再劝用户去装 ffmpeg。
+- **ffmpeg 查找扩到常见安装位置**：`~/.local/bin`、scoop、WinGet Links、chocolatey、`C:\ffmpeg\bin`——Bot 从计划任务启动、PATH 比终端短时也能找到。
+- **B 站风控友好提示**：接口返回 HTML/412 时提示「多为风控/限流」并自动重试一次，不再抛难懂的 `JSONDecodeError`。
+
+### v1.2.1（2026-10-19）
+
+- 文档整理：README 精简到百来行，细节拆到 `docs/`（工作原理、被动链路、配置参考、迁移、完整变更）；无功能改动。
 
 ### v1.2.0（2026-10-19）
 
-- **人设默认复用全局人格**：`[persona]` 七项（昵称 / 别名 / 核心性格 / 另一面 / 身份 / 背景故事 / 说话风格）默认读 bot 的 `config/core.toml` 的 `[personality]`，填了才覆盖。
+- **人设默认复用全局人格**：`[persona]` 七项（昵称 / 别名 / 核心性格 / 另一面 / 身份 / 背景故事 / 说话风格）默认读 bot 的 `config/core.toml` `[personality]`，填了才覆盖；原 `persona` 字段改为额外补充说明（追加在组装结果最后）。由 `services/persona.py::compose_persona` 组装，核心配置不可用时只用插件自己的值、不抛异常。
+- **新增 `bili_send_video` 工具**：把视频真正下载并发出去，聊天里不再只能贴链接。
 - **语音转写默认复用 bot 的 voice 模型**：`[asr].source` 默认 `voice`（沿用 `model_tasks.voice`，开箱可用），拿不到才退回 `provider_name`；`[asr].model` 留空＝跟随来源；新增 `[asr].endpoint_path` 适配非标准接口。
 - **默认模型改为 `utils`**：`[filter]` / `[builder]` 的 `model_name` 默认填框架任务名，新装无需先改配置（解析顺序：先任务名、再模型名）。
-- **文档与注释重写**：配置说明与源码注释改为更易懂的口吻，说清每项做什么；打包内附 `LICENSE`。
+- **开箱默认值**：`chat_tools.enabled` / `video_send.push_enabled` / `video_send.reactive_enabled` 默认开；`opinion.reactive_auto` 默认关。
+- **文档与注释重写**：配置字段说明改为小白友好版（逐条说清「干什么 / 改了怎样 / 为什么默认这样」，字段名 / 类型 / 默认值 / 校验未动）；打包内附 `LICENSE`。
 
 ### v1.1.0（2026-10-18）
 
