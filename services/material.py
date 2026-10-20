@@ -264,13 +264,39 @@ async def fetch_view(vid: str) -> dict:
     if not key:
         raise BiliMaterialError("vid 为空，无法请求 view 接口")
     params = {"aid": key[2:]} if key[:2].lower() == "av" else {"bvid": key}
-    try:
-        async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT, headers=_headers(key)) as client:
-            resp = await client.get(VIEW_API, params=params)
-            payload = resp.json()
-    except Exception as exc:  # noqa: BLE001
-        # 抛出的异常文本就地脱敏：本函数手上没凭据，靠登记册兜底。
-        raise BiliMaterialError(_redact(f"请求 view 接口失败: {type(exc).__name__}: {exc}")) from exc
+    # 请求 + 解析分开处理：B 站风控时返回的是 HTML（不是 JSON），
+    # 直接 resp.json() 会抛一句谁也看不懂的 JSONDecodeError；这里翻译成人话。
+    last_error = ""
+    for attempt in (1, 2):
+        try:
+            async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT, headers=_headers(key)) as client:
+                resp = await client.get(VIEW_API, params=params)
+            if resp.status_code >= 400:
+                last_error = (
+                    f"B 站接口返回 HTTP {resp.status_code}（多为风控/限流）"
+                )
+            else:
+                try:
+                    payload = resp.json()
+                    break
+                except Exception:  # noqa: BLE001
+                    snippet = (resp.text or "")[:80].replace("\n", " ")
+                    last_error = (
+                        "B 站返回的不是 JSON（常见于风控 412 页面）：" + snippet
+                    )
+        except Exception as exc:  # noqa: BLE001
+            last_error = f"{type(exc).__name__}: {exc}"
+        if attempt == 1:
+            # 风控/抖动往往一两秒后就缓过来，给一次重试机会再放弃
+            await asyncio.sleep(1.2)
+    else:
+        raise BiliMaterialError(
+            _redact(
+                "请求 view 接口失败：" + last_error
+                + "（若一直这样：稍等再试，或在 [bili_credential] 配好登录凭据可降低风控概率）",
+                None,
+            )
+        )
     if not isinstance(payload, dict):
         raise BiliMaterialError("view 接口返回不是 JSON 对象")
     if payload.get("code") != 0:

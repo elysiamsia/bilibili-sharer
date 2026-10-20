@@ -15,7 +15,7 @@
 
 ## 快速开始
 
-1. **安装**：市场里点安装，或把 `bilibili_sharer-1.2.1.mfp` 放进 `plugins/` 目录
+1. **安装**：市场里点安装，或把 `bilibili_sharer-1.2.2.mfp` 放进 `plugins/` 目录
 2. **配置目标**：编辑 `config/plugins/bilibili_sharer/config.toml`，在 `[[sender.targets]]` 里填 `type`（`group`/`private`）与 `id`（群号/QQ 号）
 3. **重启 Bot**（插件与配置都不热加载）
 
@@ -86,6 +86,11 @@ interests = ["游戏", "科技"]
 | [完整变更记录](docs/changelog-full.md) | 历史版本全部条目 |
 
 ## 变更记录
+
+### v1.2.2（2026-10-20）
+
+- ffmpeg 查找多了一级「常见安装位置」（`~/.local/bin`、WinGet、scoop、choco、`C:\ffmpeg\bin`）——装在 PATH 之外也能自动找到。
+- B 站接口被风控（返回 HTML/412）时，提示改成人话并自动重试一次，不再抛难懂的 JSONDecodeError。
 
 ### v1.2.1（2026-10-19）
 

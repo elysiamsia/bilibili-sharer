@@ -98,6 +98,29 @@ class BiliDownloadError(Exception):
 # ---------------------------------------------------------------- ffmpeg 解析
 
 
+def _ffmpeg_candidate_paths() -> list[Path]:
+    """列一批「ffmpeg 常见的藏身之处」。
+
+    为什么要列这些？因为 Bot 不一定从你的终端启动——如果它作为计划任务/服务运行，
+    PATH 可能比你在命令行里看到的短很多，于是明明装了 ffmpeg 也找不到。
+    这里把几个常见包管理器与手装目录都写进来，找到哪个用哪个。
+    """
+    home = Path.home()
+    local = str(os.environ.get("LOCALAPPDATA") or "").strip()
+    progdata = str(os.environ.get("ProgramData") or "").strip()
+    candidates: list[Path] = [
+        home / ".local" / "bin" / FFMPEG_BIN_NAME,
+        home / "scoop" / "shims" / FFMPEG_BIN_NAME,
+        Path("C:/ffmpeg/bin") / FFMPEG_BIN_NAME,
+    ]
+    if local:
+        candidates.append(Path(local) / "Microsoft" / "WinGet" / "Links" / FFMPEG_BIN_NAME)
+        candidates.append(Path(local) / "ffmpeg" / "bin" / FFMPEG_BIN_NAME)
+    if progdata:
+        candidates.append(Path(progdata) / "chocolatey" / "bin" / FFMPEG_BIN_NAME)
+    return candidates
+
+
 def resolve_ffmpeg(ffmpeg_path: str) -> str:
     """分三级、就近到远地找 ffmpeg 可执行文件。
 
@@ -127,6 +150,13 @@ def resolve_ffmpeg(ffmpeg_path: str) -> str:
     found = shutil.which("ffmpeg")
     if found:
         return found
+
+    # 2.5 级：常见安装位置。很多人把 ffmpeg 装在 ~/.local/bin、WinGet、scoop、choco 里，
+    # 但这些目录不一定在 Bot 进程的 PATH 中（比如从计划任务/服务启动时），所以这里主动去找。
+    for candidate in _ffmpeg_candidate_paths():
+        if candidate.is_file():
+            logger.info(f"[video_send] 在常见安装位置找到 ffmpeg：{candidate}")
+            return str(candidate)
 
     try:
         parser_dir = get_plugin_path(PARSER_PLUGIN_NAME)
