@@ -58,3 +58,24 @@ class BiliSharerPlugin(BasePlugin):
 
         self._fetcher = BiliFetcher(cfg)
         self._filter = VideoFilter(cfg.filter)
+        self._builder = MessageBuilder(cfg.builder)
+
+        # 最后把调度器请出来，两个后台循环从这一刻开始转。
+        # 少了这一段，插件会加载成功、日志也好看，但 fetch/send 永不启动——
+        # 只在群里被动发视频，定时推送静悄悄不干活（v1.2.0/v1.2.2 发布件就栽在这里）。
+        self._scheduler = SharerScheduler(
+            plugin=self,
+            config=cfg,
+            state_manager=self._state_manager,
+            fetcher=self._fetcher,
+            video_filter=self._filter,
+            builder=self._builder,
+        )
+        await self._scheduler.start()
+        logger.info("Bilibili sharer 插件加载完成")
+
+    async def on_plugin_unloaded(self) -> None:
+        # 卸载收尾：把定时调度停掉。先 hasattr 问一句，是因为插件从没启用过时它压根没被创建。
+        if hasattr(self, "_scheduler"):
+            await self._scheduler.stop()
+        logger.info("Bilibili sharer 插件已卸载")
