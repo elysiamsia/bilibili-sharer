@@ -174,8 +174,51 @@ def resolve_ffmpeg(ffmpeg_path: str) -> str:
     return ""
 
 
+def _framework_repo_root() -> Path | None:
+    """用框架自己的 `src` 包位置反推 Bot 仓库根；推不出返回 None。
+
+    为什么不能直接用 `src.__file__`？框架的 `src` 是**命名空间包**（没有 `__init__.py`），
+    实测 `src.__file__` 是 None，硬取会让 `Path()` 撞 TypeError。所以优先读 `__path__`
+    里的目录，再退到 `__file__`（真有 init 文件时）。判定标准：目录名必须是 `src`，
+    且它的上一层是仓库根（含 config / plugins 之一）——避免把 site-packages 里的
+    同名包误当仓库根。
+    """
+    try:
+        import src as _framework_src  # noqa: PLC0415（框架包，插件本来就在用它）
+    except Exception as exc:  # noqa: BLE001
+        logger.debug(f"[video_send] 无法 import 框架 src 包：{type(exc).__name__}: {exc}")
+        return None
+
+    candidates: list[str] = []
+    for item in getattr(_framework_src, "__path__", None) or []:
+        candidates.append(str(item))
+    file_attr = getattr(_framework_src, "__file__", None)
+    if file_attr:
+        candidates.append(str(Path(file_attr).resolve().parent))
+
+    for raw in candidates:
+        try:
+            src_dir = Path(raw).resolve()
+        except (OSError, ValueError):
+            continue
+        base = src_dir.parent
+        if src_dir.name == "src" and ((base / "config").is_dir() or (base / "plugins").is_dir()):
+            return base
+    return None
+
+
 def _repo_root() -> Path:
-    """仓库根目录：优先请 plugin_api 反推，推不出再按本文件位置回退。"""
+    """找出 Bot 仓库根目录（缓存就落在 <仓库根>/data/bilibili_sharer/cache）。
+
+    三级找法，越靠前越准：
+    1. `plugin_api.get_plugin_path(<本插件>)` 指向 `<仓库根>/plugins/bilibili_sharer` 时，
+       往上两层就是仓库根——本地文件夹安装走这条；
+    2. 框架自己的 `src` 包必然在仓库根下（`<仓库根>/src/...`），拿它的位置反推——
+       **mfp / 市场安装必须靠这条**：插件会被解包到临时目录（实测
+       `%LOCALAPPDATA%\\Temp\\<guid>`），这时按本文件位置「往上数三层」会落到
+       用户目录，缓存就跑到 `%LOCALAPPDATA%\\data\\...` 去了；
+    3. 前两条都不成立（极端裁剪环境）才退回按文件位置数层级。
+    """
     try:
         plugin_dir = get_plugin_path(PLUGIN_NAME)
     except Exception as exc:  # noqa: BLE001
@@ -185,6 +228,11 @@ def _repo_root() -> Path:
         candidate = Path(plugin_dir).resolve()
         if candidate.name == PLUGIN_NAME and candidate.parent.name == "plugins":
             return candidate.parent.parent
+
+    framework_root = _framework_repo_root()
+    if framework_root is not None:
+        return framework_root
+
     return Path(__file__).resolve().parents[3]
 
 

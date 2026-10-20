@@ -9,6 +9,7 @@
 - **修复：stream 不可用时视频被永久标记已发送**：`_try_send` 在 `_send_to_target` 返回 `None`（拿不到 stream）后仍调用 `mark_as_sent`，这条视频对那个目标从此沉默。现在改为记入该目标的失败名单、不标记已看；通道恢复后下一个视频发送成功即整体清空名单。
 - **修复：`bili_send_video` 工具下载时忽略凭据**：工具把 `cfg.video_send` 而不是整份配置递给下载器，`[bili_credential]` 永远读不到，登录可见的画质被匿名降级。现在传整份配置。
 - **改进：已发送历史确定性淘汰**：`sent_bvids` 改为有序列表追加，超过 1000 条淘汰最旧的一条（原来集合转列表后随机砍，可能丢掉刚发过的视频导致重复推送）。
+- **修复：mfp / 市场安装时缓存落点错误**：插件被解包到 `%LOCALAPPDATA%\Temp\<guid>` 后，`_repo_root()` 按文件位置「往上数三层」得到 `%LOCALAPPDATA%`，下载/合流缓存因此写进 `C:\Users\<user>\AppData\Local\data\bilibili_sharer\cache`。现改为：文件夹安装照旧取 `plugins` 上一层；否则用框架 `src` 包（命名空间包，读 `__path__`）反推 Bot 仓库根；两条都不成立才退回原逻辑。
 - 新增仓库内自检：`tests/` 静态契约（manifest `include` 与 `get_components` 一致、入口接线、配置节、版本一致性）+ 纯函数/状态单测；GitHub Actions 每次 push 跑一遍。**这类自检会在发布前抓住「文件截断」**。
 
 ### v1.2.2（2026-10-20）
