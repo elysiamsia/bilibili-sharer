@@ -46,6 +46,7 @@ import httpx
 
 from bilibili_api.video import (
     AudioStreamDownloadURL,
+    MP4StreamDownloadURL,
     Video,
     VideoCodecs,
     VideoDownloadURLDataDetecter,
@@ -559,6 +560,76 @@ def _page_cid(page_info: Any, page: int) -> int:
         raise BiliDownloadError(f"分 P {page} 的 cid 不可解析：{raw!r}") from exc
 
 
+async def _download_single_file(
+    video: Video, page_index: int, bvid: str, page: int, budget: float
+) -> tuple[Path, dict]:
+    """没有 ffmpeg 时的降级路线：取 B 站的「单文件流」（durl：画面+声音在同一段 MP4 里）直接下载。
+
+    为什么能这样？B 站的播放接口对某些客户端会返回整段文件（`html5=True` 时常见），
+    它自带音视频、不需要合流，所以不依赖 ffmpeg。代价是清晰度通常只有 360P/480P——
+    但对「我不想装任何东西、能看就行」的用户来说，这比发不出去强多了。
+
+    Args:
+        video: 已构造好的 Video 对象。
+        page_index: 分 P 下标（0 基）。
+        bvid: 视频号（给产物命名）。
+        page: 分 P 页码（1 基，给产物命名）。
+        budget: 体积预算（字节）。
+
+    Returns:
+        (产物路径, 元数据)：元数据里 `progressive=True` 标明走的是单文件流。
+
+    Raises:
+        BiliDownloadError: 没有单文件流 / 不是 MP4 / 超预算 / 传输或磁盘异常。
+    """
+    # 关键细节（2026-10-20 实测）：带登录凭据请求时，B 站给的是 DASH（要合流）；
+    # 只有**匿名**请求才会给 durl 单文件流。所以这里特意用匿名 Video 再问一次——
+    # 反正单文件流本来就无需鉴权，顺便也少发一次 Cookie。
+    try:
+        anonymous = _build_video(bvid, None)
+        data = await anonymous.get_download_url(page_index=page_index, html5=True)
+    except Exception:  # noqa: BLE001
+        data = await video.get_download_url(page_index=page_index, html5=True)
+    detecter = VideoDownloadURLDataDetecter(data or {})
+    if not detecter.check_flv_mp4_stream():
+        raise BiliDownloadError(
+            "没找到 ffmpeg，且这个视频没有可直接发送的单文件流；装上 ffmpeg（或安装 parser 插件）就能发"
+        )
+    streams = detecter.detect()
+    mp4 = next((s for s in streams or [] if isinstance(s, MP4StreamDownloadURL)), None)
+    if mp4 is None:
+        raise BiliDownloadError("单文件流不是 MP4 格式，暂不支持；装上 ffmpeg 可走 DASH 合流")
+
+    try:
+        directory = _cache_dir()
+    except OSError as exc:
+        raise BiliDownloadError(f"缓存目录准备失败：{type(exc).__name__}: {exc}") from exc
+    token = uuid.uuid4().hex[:8]
+    tmp = directory / f"{bvid}_p{page}_{token}.mp4"
+    final = directory / f"{bvid}_p{page}.mp4"
+    _unlink(tmp)
+    started = time.monotonic()
+    try:
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(DOWNLOAD_TIMEOUT, connect=CONNECT_TIMEOUT),
+            headers=_request_headers(),
+            follow_redirects=True,
+        ) as client:
+            size = await _stream_to_file(client, mp4.url, tmp, max_bytes=budget, label="单文件流")
+        try:
+            os.replace(tmp, final)
+            out = final
+        except OSError:
+            out = tmp  # 稳定名被占用（并发发送）时保留 token 名交付
+    except BaseException:
+        _unlink(tmp)
+        raise
+    meta = {"bvid": bvid, "page": page, "size": size, "progressive": True,
+            "quality": "单文件流", "elapsed": round(time.monotonic() - started, 2)}
+    logger.info(f"[video_send] 单文件流下载完成 {bvid} P{page}：{size} 字节 → {out}")
+    return out, meta
+
+
 async def download_bili_video(url_or_bvid: str, *, page_num: int = 1, cfg: Any) -> tuple[Path, dict]:
     """下载并合流一个 B 站视频的指定分 P。
 
@@ -593,10 +664,11 @@ async def download_bili_video(url_or_bvid: str, *, page_num: int = 1, cfg: Any) 
     budget = _budget_bytes(_cfg_field(section, "max_size_mb", 200))
     duration_limit = _duration_limit_seconds(_cfg_field(section, "max_minute", 30))
     ffmpeg = resolve_ffmpeg(str(_cfg_field(section, "ffmpeg_path", "") or ""))
+    # 没 ffmpeg 不再直接失败：DASH 双流才需要合流，B 站还能给「单文件流」（durl，音视频合一），
+    # 走那条路就不用装任何东西（代价是清晰度通常只有 360P/480P）。
     if not ffmpeg:
-        raise BiliDownloadError(
-            "未找到 ffmpeg：请在 [video_send] 配置 ffmpeg_path，或把 ffmpeg 放进系统 PATH，"
-            "或启用 parser 插件（运行时复用其捆绑 plugins/parser/bin/ffmpeg.exe）"
+        logger.info(
+            "[video_send] 没找到 ffmpeg，改用 B 站单文件流（无需合流，清晰度可能较低）"
         )
     # 凭据加载也护进契约包装：Credential 构造失手同样抛 BiliDownloadError，
     # 文本再过一遍 _redact（配置段里的字段值也在兜底范围内）。
@@ -634,6 +706,9 @@ async def download_bili_video(url_or_bvid: str, *, page_num: int = 1, cfg: Any) 
                 f"（[video_send] max_minute={_cfg_field(section, 'max_minute', 30)}，<=0 表示不限制）"
             )
         cid = _page_cid(page_info, page)  # 安全取整：脏 cid 不裸抛
+        if not ffmpeg:
+            # 降级路线：直接下整段单文件流（自带画面与声音，不需要合流）
+            return await _download_single_file(video, page_index, bvid, page, budget)
         video_stream, audio_stream = await _select_streams(video, cid, quality)
 
         try:
