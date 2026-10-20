@@ -248,6 +248,17 @@ class SharerScheduler:
             else:
                 # 关（默认）：照老样子调用，不传任何新关键字参数
                 delivered = await self._send_to_target(target, message, video_url)
+            if delivered is None:
+                # 文字压根没送出去（stream 建不出来），这条视频不能算「已看过」——
+                # 否则它会带着「已发送」的标记永远沉默下去。记进本目标的失败名单，
+                # 等通道恢复、下一个视频发送成功时整个名单会自动清空，它还有机会再来。
+                bvid = selected.get("bvid", "")
+                if bvid:
+                    self._failed_sends.setdefault(target_key, set()).add(bvid)
+                logger.warning(
+                    f"向目标 {target_key} 发送失败（stream 不可用），本轮不标记 bvid={bvid} 为已看"
+                )
+                return
             await self._state.mark_as_sent(target_key, selected["bvid"])
             # 这次发成功了——把这个目标的失败黑名单整个清空，既往不咎
             self._failed_sends.pop(target_key, None)

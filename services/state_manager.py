@@ -106,13 +106,16 @@ class StateManager:
         return [v for v in pool if v["bvid"] not in sent_bvids]
 
     async def mark_as_sent(self, target_key: str, bvid: str) -> None:
-        """记一笔「这片子已寄给过这个目标」，并给历史长度设上限。"""
+        """记一笔「这片子已寄给过这个目标」，并给历史长度设上限。
+
+        历史保持「先发的在前」的顺序（列表追加，不转集合）：超上限时淘汰最旧的，
+        而不是像以前那样「集合转列表后随手砍一刀」——那会随机丢掉几条刚发过的，
+        同名视频下次又被推一遍。
+        """
         state = self.get_target_state(target_key)
-        sent = set(state.get("sent_bvids", []))
-        sent.add(bvid)
-        # 攒满 _MAX_SENT_BVIDS 就修剪到上限以内，账页不至于越滚越厚
-        sent_list = list(sent)
-        if len(sent_list) > _MAX_SENT_BVIDS:
-            sent_list = sent_list[-_MAX_SENT_BVIDS:]
-        state["sent_bvids"] = sent_list
+        sent = [item for item in state.get("sent_bvids", []) if item != bvid]
+        sent.append(bvid)
+        if len(sent) > _MAX_SENT_BVIDS:
+            sent = sent[-_MAX_SENT_BVIDS:]
+        state["sent_bvids"] = sent
         await self.save_states()

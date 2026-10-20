@@ -65,7 +65,8 @@ class BiliSendVideoTool(BaseTool):
         if not raw_url:
             return False, '发视频失败：没给链接或 BV 号呀'
 
-        # 凭据只用于「把异常文本里的敏感值抹掉」，发不发得出去和它无关（匿名也能下）
+        # 凭据先在这里读一次：一是给异常文本脱敏用，二是下载器会自己按 cfg.bili_credential
+        # 再读一次——登录态影响能拿到的画质，匿名下载通常只能就近降级。
         credential: Any = None
         try:
             credential = load_credential(cfg.bili_credential)
@@ -92,9 +93,11 @@ class BiliSendVideoTool(BaseTool):
         if not stream_id:
             return False, '发视频失败：当前会话不可用（拿不到聊天流 ID）'
 
-        # 下载（体积/时长/清晰度限制都在下载器里，超限会抛出可读原因）
+        # 下载（体积/时长/清晰度限制都在下载器里，超限会抛出可读原因）。
+        # 这里递**整份插件配置**而不是只递 cfg.video_send：下载器要按 cfg.bili_credential
+        # 读登录凭据，登录后才能拿到配置里请求的画质（匿名常常只能拿到 480P 左右）。
         try:
-            path, meta = await download_bili_video(link, page_num=int(page or 1), cfg=cfg.video_send)
+            path, meta = await download_bili_video(link, page_num=int(page or 1), cfg=cfg)
         except BiliDownloadError as exc:
             return False, '发视频失败：' + _redact(str(exc), credential)
         except Exception as exc:  # noqa: BLE001
