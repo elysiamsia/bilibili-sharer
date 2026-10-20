@@ -1,8 +1,8 @@
 {
   "name": "bilibili_sharer",
   "display_name": "Bilibili 分享",
-  "version": "1.2.3",
-  "description": "自动分享 Bilibili 视频到配置的目标（platform 默认 qq），基于人设过滤，各目标独立定时器，内置 B站视频素材读取（字幕/弹幕/评论）与搜索原生工具；支持被动收链接自动发送视频与点评（默认关闭）",
+  "version": "1.2.4",
+  "description": "自动分享 Bilibili 视频到配置的目标（platform 默认 qq），基于人设过滤，各目标独立定时器，内置 B站视频素材读取（字幕/弹幕/评论）与搜索原生工具；支持被动收链接自动发送视频与点评（默认关闭）；新增扫码登录（bili_login）与本机登录态自动探测",
   "author": "elysiamsia",
   "license": "MIT",
   "homepage": "https://github.com/elysiamsia/bilibili-sharer",
@@ -45,6 +45,12 @@
     {
       "component_type": "tool",
       "component_name": "bili_send_video",
+      "dependencies": [],
+      "enabled": true
+    },
+    {
+      "component_type": "tool",
+      "component_name": "bili_login",
       "dependencies": [],
       "enabled": true
     },

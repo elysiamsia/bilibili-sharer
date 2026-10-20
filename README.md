@@ -1,13 +1,13 @@
 # bilibili_sharer
 
-自动从 B 站抓热门视频，按 Bot 人设过滤后定时分享到**配置的目标**（群 / 私聊，`platform` 默认 `qq`）；同时向聊天 LLM 提供三个原生工具（读素材 / 搜视频 / **发视频**），并支持群友发链接时自动发视频与语音转写。
+自动从 B 站抓热门视频，按 Bot 人设过滤后定时分享到**配置的目标**（群 / 私聊，`platform` 默认 `qq`）；同时向聊天 LLM 提供四个原生工具（读素材 / 搜视频 / **发视频** / **扫码登录**），并支持群友发链接时自动发视频与语音转写。
 
 [市场页面](https://39.96.71.162/plugin/bilibili_sharer) · [GitHub 仓库](https://github.com/elysiamsia/bilibili-sharer) · [Releases](https://github.com/elysiamsia/bilibili-sharer/releases)
 
 ## 功能亮点
 
 - **定时推送**：每个目标独立的人设、兴趣与定时器，互不干扰
-- **三个原生工具**：`bili_video_material`（字幕/弹幕/热门评论素材）、`bili_search_videos`（搜索）、`bili_send_video`（把视频真正发出去）
+- **四个原生工具**：`bili_video_material`（字幕/弹幕/热门评论素材）、`bili_search_videos`（搜索）、`bili_send_video`（把视频真正发出去）、`bili_login`（手机扫码登录，字幕与画质都靠它）
 - **被动链路**：群友发 B 站链接 → 自动下载发视频；其他平台链接借 parser（装了才借，没装就跳过）
 - **语音转写**：视频没字幕时下载音频单轨转写，解决「只总结弹幕」的问题（默认关）
 - **开箱可用**：人设默认复用 bot 全局人格、模型默认用 `utils` 任务，新装通常不用改任何东西
@@ -15,12 +15,12 @@
 
 ## 快速开始
 
-1. **安装**：市场里点安装，或把 `bilibili_sharer-1.2.3.mfp` 放进 `plugins/` 目录
+1. **安装**：市场里点安装，或把 `bilibili_sharer-1.2.4.mfp` 放进 `plugins/` 目录
 2. **配置目标**：编辑 `config/plugins/bilibili_sharer/config.toml`，在 `[[sender.targets]]` 里填 `type`（`group`/`private`）与 `id`（群号/QQ 号）
 3. **重启 Bot**（插件与配置都不热加载）
 
 > ⚠️ **模型**：`[filter].model_name` / `[builder].model_name` 默认 `utils`（框架任务名，一般不用改）。想指定具体模型就填本机 `config/model.toml` 里的模型名；取不到模型时过滤会 fail-open（跳过判断、一律放行）。
-> 📄 **字幕**：B 站字幕需要登录凭据。想要字幕就往 `[bili_credential]` 里填 `sessdata` 或 `bililearn_cookie_file`；不填也能用，只是没字幕（会自动走弹幕/评论或语音转写）。
+> 📄 **字幕 / 高清**：B 站字幕与高清画质需要登录态。**最简单：私聊 Bot 说「登录B站」，它会发一张二维码，手机 B 站扫一下就好**（凭据存 `data/bilibili_sharer/credentials.json`，立即生效、不用重启、不用改配置）。不想扫码也行：插件会自动探测本机 Edge / Chrome / Firefox 或 B 站桌面客户端里的登录 Cookie（`[bili_credential].auto_detect`，默认开）；装了 BiliLearn 的还可以填 `bililearn_cookie_file`。全都没有也能用，只是没字幕（自动走弹幕/评论或语音转写）。
 
 
 ## 最小配置示例
@@ -49,7 +49,10 @@ interests = ["游戏", "科技"]
 | `[builder].model_name` | `utils` | 推荐语/点评模型 |
 | `[builder].max_tokens` | `4096` | 点评输出上限 |
 | `[persona]` 七项 | 全空 | 留空＝复用 bot 全局人格（`config/core.toml` 的 `[personality]`），填了才覆盖 |
-| `[chat_tools].enabled` | `true` | 三个聊天工具是否可用 |
+| `[chat_tools].enabled` | `true` | 四个聊天工具是否可用（素材/搜索/发视频/扫码登录） |
+| `[bili_credential].auto_detect` | `true` | 没填凭据时自动找本机登录态（扫码记录 → 浏览器 Cookie） |
+| `[bili_credential].browser_cookie_source` | `auto` | 自动探测看哪家：`auto` / `edge` / `chrome` / `brave` / `firefox` / `none` |
+| `[bili_credential].login_private_only` | `true` | 扫码登录只允许私聊（群里扫码会把扫码人的账号绑给 Bot） |
 | `[opinion].push_mode` | `simple` | `off` / `simple`（浅推荐语）/ `deep`（读素材做内容级点评） |
 | `[opinion].reactive_auto` | `false` | 群友发链接时是否自动点评一句 |
 | `[video_send].push_enabled` | `true` | 推送时自己发视频（关掉＝只发链接） |
@@ -63,7 +66,7 @@ interests = ["游戏", "科技"]
 
 1. **推送**（后台自动）：定时抓取 → 硬性过滤 → 按人设批量判断 → 发链接 + 推荐语（可选：自己把视频也发出来）
 2. **被动**（群友触发）：会话里出现 B 站链接 → 校验开关/防抖/避让 → 自动发视频（可选：自动点评一句）
-3. **聊天拉取**（LLM 按需）：问「这视频讲了什么」→ 读素材；说「直接发我」→ 调 `bili_send_video` 把文件发出来
+3. **聊天拉取**（LLM 按需）：问「这视频讲了什么」→ 读素材；说「直接发我」→ 调 `bili_send_video` 把文件发出来；说「登录B站」→ 调 `bili_login` 发二维码
 
 ## 已知限制
 
@@ -74,6 +77,7 @@ interests = ["游戏", "科技"]
 5. 长视频超过 `[asr].max_minute` 时不转写，素材会明确提示「依据不足」。
 6. 非 `qq` 平台的端到端链路尚未验证（`platform` 必须与本机适配器签名一致）。
 7. 没装 ffmpeg 仍能发视频，但只能退回 B 站的「单文件流」（通常 360P/480P）；视频本身不提供单文件流时会失败并提示装 ffmpeg（或装 parser 借它捆绑的那份）。
+8. 浏览器正开着时它的 Cookie 库被独占（实测 Edge 不让读），自动探测会失败并提示「关掉浏览器或用扫码登录」；新版 Chrome/Edge 的 v20 App-Bound 加密也读不了——扫码登录不受这些限制。
 
 ## 更多文档
 
@@ -86,6 +90,13 @@ interests = ["游戏", "科技"]
 | [完整变更记录](docs/changelog-full.md) | 历史版本全部条目 |
 
 ## 变更记录
+
+### v1.2.4（2026-10-20）
+
+- **新增扫码登录工具 `bili_login`**：私聊里说「登录B站」→ Bot 发二维码 → 手机 B 站扫码确认 → 凭据写入 `data/bilibili_sharer/credentials.json`，**立即生效、不用重启**。字幕、高清画质、会员可见内容都靠它。
+- **不再必须装 BiliLearn**：`[bili_credential]` 全空时会自动找登录态——先看本插件自己的扫码记录，再探测 Edge / Chrome / Brave / Firefox / B 站桌面客户端的 bilibili Cookie（DPAPI + AES-GCM 解密，只读、不打印值）。`browser_cookie_source` 可指定只看哪家，`auto_detect = false` 可彻底关掉。
+- **登录安全默认**：`login_private_only = true`——群里扫码会把「扫码那个人」的账号绑给 Bot，所以登录只在私聊里进行；群聊请求会得到一句解释。
+- 探测失败一律给可读原因（浏览器占用 / v20 加密 / 没有库），不抛异常、不影响匿名使用。
 
 ### v1.2.3（2026-10-20）
 

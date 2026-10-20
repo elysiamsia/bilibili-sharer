@@ -3,6 +3,14 @@
 > 历史版本的全部条目。
 
 
+### v1.2.4（2026-10-20）
+
+- **新增 `bili_login` 扫码登录工具**：`QrCodeLogin(WEB)` 生成二维码 → `send_image` 发到当前会话 → 每 2 秒轮询 `check_state`（SCAN 提示已扫码 / CONF 提示确认中 / TIMEOUT 提示重来）→ 成功后把 sessdata / bili_jct / buvid3 / DedeUserID / ac_time_value 写入 `data/bilibili_sharer/credentials.json`（0600），并尝试用 `user.get_self_info` 回报昵称。凭据每次现读，**写完立即生效，不用重启**。
+- **新增登录态自动探测**（`services/browser_cookies.py`）：Edge / Chrome / Brave / Vivaldi / Firefox / B 站桌面客户端；Chromium 走 `Local State` 的 DPAPI 密钥 + AES-GCM（`cryptography` 或 `pycryptodome` 任一即可，都没有就跳过该来源），Firefox 走明文 `cookies.sqlite`；`v20` App-Bound 加密明确跳过。只读、不打印值；Cookie 库被浏览器独占时给出「浏览器正在运行」的可读原因。
+- **凭据取值链扩展**：配置字段 → BiliLearn 文件 → 扫码记录 → 本机浏览器 Cookie；全空仍匿名，行为向后兼容。
+- **新增 `[bili_credential]` 字段**：`login_private_only`（默认 true，只允许私聊扫码）、`auto_detect`（默认 true）、`browser_cookie_source`（默认 auto）。
+- **组件清单**：`include` 与 `get_components()` 增加到 5 个（4 个 tool + 1 个 event_handler）；manifest 版本 1.2.4。
+
 ### v1.2.3（2026-10-20）
 
 - **修复（重要）：`plugin.py` 被截断，定时推送从未启动**：入口文件少了 builder / 调度器的创建与 `start()`，也少了 `on_plugin_unloaded`。插件加载成功、日志正常，但 `fetch_loop` / `send_loop` 根本没跑——只剩群友发链接的被动链路在工作。已按设计补回完整接线（记账本 → 抓取 → 筛选 → 排版 → 调度器 start），并补回卸载时的 `scheduler.stop()`。

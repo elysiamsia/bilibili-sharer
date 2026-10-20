@@ -9,6 +9,7 @@
 
 1. **删除 MCP 条目**：编辑 `config/mcp.toml`，在 `[mcp].stdio_servers` 的 inline table 中精确删除 `bili-learn = { ... }` 一段（注意前后逗号，其余条目一字不动）。
 2. **聊天工具开关**：`config/plugins/bilibili_sharer/config.toml` 中 `[chat_tools].enabled`——内置工具**默认开启**；若你手动关掉过，调用只会得到「未启用」提示。
+2.5 **登录态不再依赖 BiliLearn**（v1.2.4）：私聊 Bot 说「登录B站」扫个码就能拿到字幕/高清；插件也会自动探测本机浏览器里的 B 站登录 Cookie。原来填 `bililearn_cookie_file` 的配置继续有效，但已经不是必需品。
 3. **配置 B 站凭据（可选）**：在插件配置 `[bili_credential]` 填 `sessdata` / `bili_jct` / `buvid3` / `ac_time_value`；或直接填旧面板的 cookie 文件路径，例如
    `bililearn_cookie_file = "C:\\Users\\<你的用户名>\\AppData\\Local\\BiliLearn\\Data\\bilibili_cookies.json"`（TOML 字符串里反斜杠要写成 `\\`，也可以直接用正斜杠 `/`，或写成单引号字面量字符串）。
    （需要登录的主要是 AI 字幕轨与部分评论接口；不配也能用，只是拿不到 AI 字幕。）

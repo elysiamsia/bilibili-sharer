@@ -34,6 +34,7 @@ import os
 import re
 import threading
 import time
+from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
@@ -348,14 +349,22 @@ def _read_cookie_file(path: str) -> dict[str, str]:
 def load_credential(cred_cfg: Any) -> Credential | None:
     """用插件配置拼出 bilibili_api 的 Credential。
 
-    优先级：配置字段 > bililearn_cookie_file 文件（逐字段兜底）；两边都取不到值 → None（匿名访问）。
-    路径支持 %VAR% 展开（os.path.expandvars）。全程只记录来源和字段个数，**绝不记录 cookie 值**。
+    找凭据的顺序（谁先拿到 sessdata 谁说了算）：
+    1. `[bili_credential]` 的五个字段（手填最优先）；
+    2. `bililearn_cookie_file` 指的 cookie 文件（有 BiliLearn 的人走这条，逐字段兜底）；
+    3. 本插件自己的「扫码登录记录」`data/bilibili_sharer/credentials.json`
+       （群里/私聊里叫 Bot 扫码登录后写下的，重启不丢）；
+    4. 本机登录态自动探测（`auto_detect` 开着时）：Edge / Chrome / Brave / Firefox /
+       B 站桌面客户端的 bilibili Cookie——很多人的登录态本来就在浏览器里，
+       不必为了字幕再去装 BiliLearn（`browser_cookie_source` 可指定只查某个）。
+
+    路径支持 %VAR% 展开。全程只记录来源和字段个数，**绝不记录 cookie 值**。
 
     Args:
         cred_cfg: cfg.bili_credential（或同名字段的 dict）。
 
     Returns:
-        Credential 或 None。
+        Credential 或 None（匿名访问）。
     """
     values = {name: _cfg_field(cred_cfg, name) for name in _CRED_FIELDS}
     cookie_file = os.path.expandvars(
@@ -366,6 +375,27 @@ def load_credential(cred_cfg: Any) -> Credential | None:
         file_values = _read_cookie_file(cookie_file)
 
     merged = {name: values[name] or file_values.get(name, "") for name in _CRED_FIELDS}
+    sources: list[str] = []
+    if any(values.values()):
+        sources.append("配置字段")
+    if file_values:
+        sources.append(f"cookie 文件 {cookie_file}")
+
+    if not merged["sessdata"] and _auto_detect_enabled(cred_cfg):
+        stored = load_saved_credential()
+        if stored.get("sessdata"):
+            for name in _CRED_FIELDS:
+                merged[name] = merged[name] or stored.get(name, "")
+            sources.append("扫码登录记录")
+        else:
+            scan = _scan_browser_cookies(cred_cfg)
+            if scan is not None and scan.ok:
+                for name in _CRED_FIELDS:
+                    merged[name] = merged[name] or scan.values.get(name, "")
+                sources.append(f"本机登录态（{scan.source}）")
+            elif scan is not None and scan.reason:
+                logger.info(f"自动探测本机登录态未命中：{scan.reason}")
+
     if not any(merged.values()):
         logger.info("未配置 B 站凭据，按匿名访问")
         return None
@@ -381,13 +411,104 @@ def load_credential(cred_cfg: Any) -> Credential | None:
         dedeuserid=merged["dedeuserid"] or None,
         ac_time_value=merged["ac_time_value"] or None,
     )
-    sources = []
-    if any(values.values()):
-        sources.append("配置字段")
-    if file_values:
-        sources.append(f"cookie 文件 {cookie_file}")
     logger.info(f"已加载 B 站凭据（来源：{' + '.join(sources) or '空'}）")
     return credential
+
+
+# ---------------------------------------------------------------- 扫码登录的凭据存取
+
+
+_CRED_STORE_FILE = "credentials.json"
+
+
+def _credential_store_path() -> Path:
+    """扫码登录记录的位置：<仓库根>/data/bilibili_sharer/credentials.json。"""
+    from .bili_downloader import _repo_root  # noqa: PLC0415（延迟 import：两模块互相引用）
+
+    return _repo_root().joinpath("data", "bilibili_sharer", _CRED_STORE_FILE)
+
+
+def load_saved_credential() -> dict[str, str]:
+    """读「扫码登录记录」；文件没有/坏了都当没有，绝不抛。"""
+    path = _credential_store_path()
+    try:
+        if not path.is_file():
+            return {}
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"登录记录读取失败（按未登录处理）：{type(exc).__name__}: {exc}")
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    values: dict[str, str] = {}
+    for name in _CRED_FIELDS:
+        value = raw.get(name)
+        if isinstance(value, str) and value.strip():
+            values[name] = value.strip()
+    return values
+
+
+def save_credential(values: dict[str, Any]) -> Path:
+    """把扫码登录拿到的凭据写进「登录记录」（只留需要的五个字段 + 时间，不留其它）。"""
+    path = _credential_store_path()
+    payload: dict[str, Any] = {name: str(values.get(name) or "") for name in _CRED_FIELDS}
+    payload["saved_at"] = int(time.time())
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    try:  # 尽力收紧权限（Windows 上只影响继承位，聊胜于无）
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+    _register_secret_values(payload.values())
+    logger.info(f"B 站登录凭据已保存：{path}（有效字段 {sum(1 for n in _CRED_FIELDS if payload[n])} 个）")
+    return path
+
+
+def clear_saved_credential() -> bool:
+    """删掉扫码登录记录（想换号时用）；不存在也返回 True。"""
+    path = _credential_store_path()
+    try:
+        path.unlink(missing_ok=True)
+        return True
+    except OSError as exc:
+        logger.warning(f"登录记录删除失败：{type(exc).__name__}: {exc}")
+        return False
+
+
+def _auto_detect_enabled(cred_cfg: Any) -> bool:
+    """`[bili_credential].auto_detect` 是否开着。
+
+    语义上默认开（配置类里 `default=True`），但**字段缺失时按关处理**：
+    真实配置永远带这个字段；缺字段只出现在测试替身/老式对象里，那种场合理应
+    走纯显式路径——不然测试会去读本机浏览器和真实登录文件，违反「测试隔离环境」。
+    """
+    if cred_cfg is None:
+        return False
+    value = (
+        cred_cfg.get("auto_detect")
+        if isinstance(cred_cfg, dict)
+        else getattr(cred_cfg, "auto_detect", None)
+    )
+    return False if value is None else bool(value)
+
+
+def _scan_browser_cookies(cred_cfg: Any) -> Any:
+    """按配置扫本机浏览器 Cookie；探测模块不可用/出错都只记日志，不让登录链路崩。"""
+    source = "auto"
+    if cred_cfg is not None:
+        raw = (
+            cred_cfg.get("browser_cookie_source")
+            if isinstance(cred_cfg, dict)
+            else getattr(cred_cfg, "browser_cookie_source", None)
+        )
+        source = str(raw or "auto")
+    try:
+        from . import browser_cookies  # noqa: PLC0415（可选能力：缺依赖时只跳过这一个来源）
+
+        return browser_cookies.scan_local_cookies(source)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"本机登录态探测不可用（跳过）：{type(exc).__name__}: {exc}")
+        return None
 
 
 def _credential_cookie(credential: Any) -> str:

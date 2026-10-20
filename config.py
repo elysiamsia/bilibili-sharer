@@ -195,17 +195,29 @@ class BiliSharerConfig(BaseConfig):
         timeout_seconds: int = Field(default=120, description="一次转写最多等多久，默认 120 秒。网络慢就加大；这段等待会算进深评的总时限里，别设到天上哦。")
         language: str = Field(default="zh", description="告诉模型音频是什么语言，默认 zh。留空就不传这个字段，让它自己猜～")
 
-    @config_section("bili_credential", title="B 站凭据设置", description="B 站登录 Cookie 凭据（留空则匿名访问）")
+    @config_section("bili_credential", title="B 站凭据设置", description="B 站登录态：手填 Cookie / 扫码登录 / 自动探测本机登录态")
     class BiliCredentialSection(SectionBase):
-        """B 站登录 Cookie 放在这里（留空就匿名访问呀）。"""
+        """B 站登录 Cookie 放在这里哟（全空也能自动找：先看扫码记录，再看本机浏览器）。"""
 
-        sessdata: str = Field(default="", description="B 站 Cookie 里的 SESSDATA（登录身份）。填了能取到更完整的字幕内容；不填就匿名，能用但少一些东西。它是登录凭据，别外泄呀。")
+        sessdata: str = Field(default="", description="B 站 Cookie 里的 SESSDATA（登录身份）。填了能取到更完整的字幕内容、更高清的画质；不填就匿名，能用但少一些东西。它是登录凭据，别外泄呀。")
         bili_jct: str = Field(default="", description="Cookie 里的 bili_jct（写操作令牌）。本插件只读内容，其实用不上它，填了也无害～")
         buvid3: str = Field(default="", description="Cookie 里的 buvid3（设备标识）。有时能降低被风控的概率，可填可不填哦。")
-        ac_time_value: str = Field(default="", description="Cookie 里的 ac_time_value，只用来刷新 SESSDATA。想要长期免扫码才填它呀。")
+        ac_time_value: str = Field(default="", description="Cookie 里的 ac_time_value，只用来刷新 SESSDATA。想要长期免扫码就填它呀。")
         bililearn_cookie_file: str = Field(
             default="",
-            description="偷懒好办法：填 BiliLearn 面板扫码登录后存的 cookie 文件路径，这几项就自动从那儿读。留空＝不使用～",
+            description="可选：装了 BiliLearn 的人可以填它导出的 cookie 文件路径（%LOCALAPPDATA%\\BiliLearn\\Data\\bilibili_cookies.json）。没装 BiliLearn 就留空——扫码登录或自动探测本机浏览器就够啦。",
+        )
+        login_private_only: bool = Field(
+            default=True,
+            description="扫码登录是否只允许在私聊里进行，默认 True。群里扫码会把「扫码那个人」的账号绑给 Bot，所以默认不给群聊用；确实想在群里登录再关掉它（不推荐哟）。",
+        )
+        auto_detect: bool = Field(
+            default=True,
+            description="上面几项都空着时，要不要自动找本机已有的 B 站登录态？默认开：先看 Bot 自己的扫码登录记录，再看本机浏览器/客户端的 Cookie（Edge、Chrome、Brave、Firefox、B 站桌面客户端）。关掉就只认手填与扫码啦。",
+        )
+        browser_cookie_source: str = Field(
+            default="auto",
+            description="自动探测只看哪家：auto 全试（默认）/ edge / chrome / brave / firefox / none（不查浏览器）。浏览器正在运行时 Cookie 库被独占、读不到（尤其 Edge），这时关掉浏览器或直接用扫码登录就好啦。",
         )
 
     @config_section("chat_tools", title="聊天工具设置", description="LLM 聊天工具开关（默认关闭）")

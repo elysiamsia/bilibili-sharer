@@ -29,6 +29,7 @@ README = ROOT / "README.md"
 CHANGELOG = ROOT / "docs" / "changelog-full.md"
 
 EXPECTED_COMPONENTS = [
+    "bili_login",
     "bili_search_videos",
     "bili_send_video",
     "bili_sharer_reactive",
@@ -131,6 +132,7 @@ class ManifestContractTest(unittest.TestCase):
             "BiliVideoMaterialTool": "bili_video_material",
             "BiliSearchVideosTool": "bili_search_videos",
             "BiliSendVideoTool": "bili_send_video",
+            "BiliLoginTool": "bili_login",
             "ReactiveHandler": "bili_sharer_reactive",
         }
         resolved = sorted(names.get(item, item) for item in returned)

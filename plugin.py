@@ -1,6 +1,6 @@
 """bilibili_sharer 的入口：框架开机时最先敲这扇门，插件在这里把人手和工具都摆好。
 
-它只做两件事：一是报上四个常驻组件（读素材、搜视频、发视频、守群被动链路），
+它只做两件事：一是报上五个常驻组件（读素材、搜视频、发视频、扫码登录、守群被动链路），
 二是插件启用时把各服务依次接起来、交给调度器开始每天定时干活。
 """
 
@@ -19,7 +19,12 @@ from .services.fetcher import BiliFetcher
 from .services.filter import VideoFilter
 from .services.scheduler import SharerScheduler
 from .services.state_manager import StateManager
-from .tools import BiliSearchVideosTool, BiliSendVideoTool, BiliVideoMaterialTool
+from .tools import (
+    BiliLoginTool,
+    BiliSearchVideosTool,
+    BiliSendVideoTool,
+    BiliVideoMaterialTool,
+)
 
 logger = get_logger("bilibili_sharer")
 
@@ -36,9 +41,15 @@ class BiliSharerPlugin(BasePlugin):
     dependent_components: list[str] = []
 
     def get_components(self) -> list[type]:
-        # 四个组件一直都注册，不做「开关开着才注册」那种条件注册：
+        # 五个组件一直都注册，不做「开关开着才注册」那种条件注册：
         # 要不要真做事，全在 handler 与工具自己内部判——清单必须与 manifest.json 的 include 一致。
-        return [BiliVideoMaterialTool, BiliSearchVideosTool, BiliSendVideoTool, ReactiveHandler]
+        return [
+            BiliVideoMaterialTool,
+            BiliSearchVideosTool,
+            BiliSendVideoTool,
+            BiliLoginTool,
+            ReactiveHandler,
+        ]
 
     async def on_plugin_loaded(self) -> None:
         cfg: BiliSharerConfig = cast(BiliSharerConfig, self.config)

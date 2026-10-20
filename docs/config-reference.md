@@ -107,13 +107,16 @@ timeout_seconds = 120                        # ASR 请求超时（秒）；素�
                                              # 推送 deep / 被动点评的 90 秒素材兜底也按「90 + 本值 + 60」自适应放宽
 language = "zh"                              # 语言提示；留空则不传该字段
 
-# ── B 站登录凭据（留空 = 匿名访问）──
+# ── B 站登录态（全空也能自动找：先看扫码记录，再看本机浏览器）──
 [bili_credential]
-sessdata = ""
+sessdata = ""                      # 手填登录身份；一般不用填，私聊 Bot 说「登录B站」扫码更省事
 bili_jct = ""
 buvid3 = ""
 ac_time_value = ""
-bililearn_cookie_file = ""         # 可填 BiliLearn 面板扫码登录的 cookie 文件路径，支持 %VAR% 展开
+bililearn_cookie_file = ""         # 可选：有 BiliLearn 才填（%VAR% 展开）；没有就留空
+login_private_only = true          # 扫码登录只允许私聊（群里扫码会把扫码人的账号绑给 Bot）
+auto_detect = true                 # 上面全空时自动找：扫码记录 → 本机浏览器/客户端 Cookie
+browser_cookie_source = "auto"     # auto / edge / chrome / brave / firefox / none
 
 # ── 聊天工具开关（默认开启）──
 [chat_tools]
@@ -274,10 +277,15 @@ opinion_window_minutes = 10        # 频率限制窗口长度（分钟），防�
 
 | 字段 | 默认值 | 说明 |
 |------|--------|------|
-| `sessdata` / `bili_jct` / `buvid3` / `ac_time_value` | `""` | 手动填写的 Cookie 字段 |
-| `bililearn_cookie_file` | `""` | 复用 BiliLearn 面板扫码登录的 cookie 文件（JSON），支持 `%VAR%` 环境变量展开 |
+| `sessdata` / `bili_jct` / `buvid3` / `ac_time_value` | `""` | 手动填写的 Cookie 字段（手填最优先，一般用不上） |
+| `bililearn_cookie_file` | `""` | 可选：有 BiliLearn 才填的 cookie 文件（JSON），支持 `%VAR%` 环境变量展开 |
+| `login_private_only` | `true` | 扫码登录是否只在私聊可用；群聊扫码会把**扫码那个人**的账号绑给 Bot，所以默认禁止 |
+| `auto_detect` | `true` | 没填凭据时自动找本机登录态（扫码记录 → 浏览器/客户端 Cookie） |
+| `browser_cookie_source` | `"auto"` | 自动探测范围：`auto` / `edge` / `chrome` / `brave` / `firefox` / `none` |
 
-- 取值优先级：**配置字段 > cookie 文件**（逐字段兜底，两边都取不到 → 匿名访问）
+- 取值顺序（谁先拿到 `SESSDATA` 谁说了算）：**配置字段 → `bililearn_cookie_file` → 扫码登录记录 → 本机浏览器 Cookie**；全都没有 → 匿名访问
+- **扫码登录**（推荐）：私聊 Bot 说「登录B站」→ 它发二维码 → 手机 B 站扫码确认 → 凭据写入 `data/bilibili_sharer/credentials.json`，立即生效、不用重启、不用改配置
+- **自动探测**：读本机 Edge / Chrome / Brave / Vivaldi / Firefox 与 B 站桌面客户端的 `bilibili.com` Cookie（Chromium 用 DPAPI + AES-GCM 解密，v20 App-Bound 加密读不了；浏览器运行时会独占 Cookie 库，此时探测失败并提示改用扫码）
 - 需要登录才能拿到的内容：AI 字幕轨、部分评论接口；不配凭据时字幕段通常显示「未获取到字幕，可能无 CC 字幕或需要登录」
 - 代码与日志**从不记录 cookie 值**：日志只写来源与字段个数。异常文本的脱敏覆盖面 = **聊天工具 / 推送 / 被动三条链路 + 素材构造点**：素材服务内部（view 元数据 / 字幕 / 弹幕 / 热门评论 / 搜索的失败文本）、两个聊天工具（链接回显与失败返回）、推送 deep 点评（凭据加载失败 + 素材获取失败 / 异常两处）、被动自动点评（同三处）、以及自研下载器的凭据加载点，写日志或抛异常前都过同一个 `material._redact`。脱敏值有两个来源：显式传入的凭据对象或 `[bili_credential]` 配置段字段，加上凭据加载成功时登记的「已知凭据值」——后者兜住拿不到凭据对象的构造点。ASR 的 `api_key` 另经自身脱敏（只进 `Authorization` 请求头）。
 
