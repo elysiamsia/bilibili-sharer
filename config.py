@@ -197,15 +197,15 @@ class BiliSharerConfig(BaseConfig):
 
     @config_section("bili_credential", title="B 站凭据设置", description="B 站登录态：手填 Cookie / 扫码登录 / 自动探测本机登录态")
     class BiliCredentialSection(SectionBase):
-        """B 站登录 Cookie 放在这里哟（全空也能自动找：先看扫码记录，再看本机浏览器）。"""
+        """B 站登录态都在这一节哟：手填 Cookie、扫码登录（私聊 Bot 发「登录B站」）、自动探测本机浏览器，任选其一；全空就匿名。"""
 
-        sessdata: str = Field(default="", description="B 站 Cookie 里的 SESSDATA（登录身份）。填了能取到更完整的字幕内容、更高清的画质；不填就匿名，能用但少一些东西。它是登录凭据，别外泄呀。")
-        bili_jct: str = Field(default="", description="Cookie 里的 bili_jct（写操作令牌）。本插件只读内容，其实用不上它，填了也无害～")
-        buvid3: str = Field(default="", description="Cookie 里的 buvid3（设备标识）。有时能降低被风控的概率，可填可不填哦。")
-        ac_time_value: str = Field(default="", description="Cookie 里的 ac_time_value，只用来刷新 SESSDATA。想要长期免扫码就填它呀。")
+        sessdata: str = Field(default="", description="B 站 Cookie 里的 SESSDATA（登录身份）。一般不用手填——私聊 Bot 说「登录B站」扫个码就行，凭据会存进 data/bilibili_sharer/credentials.json；手填最优先。它能解锁字幕与更高画质，别外泄呀。")
+        bili_jct: str = Field(default="", description="Cookie 里的 bili_jct（写操作令牌）。插件只读内容，用不上它；扫码登录会自动存一份，手填也无害～")
+        buvid3: str = Field(default="", description="Cookie 里的 buvid3（设备标识）。扫码登录通常一并拿到，有时能降低被风控的概率；缺失也不影响读字幕哦。")
+        ac_time_value: str = Field(default="", description="Cookie 里的 ac_time_value（续期令牌）。扫码登录会自动写入（B 站给的 refresh_token），用来续期 SESSDATA；手填就长期免扫码啦。")
         bililearn_cookie_file: str = Field(
             default="",
-            description="可选：装了 BiliLearn 的人可以填它导出的 cookie 文件路径（%LOCALAPPDATA%\\BiliLearn\\Data\\bilibili_cookies.json）。没装 BiliLearn 就留空——扫码登录或自动探测本机浏览器就够啦。",
+            description="可选：装了 BiliLearn 的人可以填它导出的 cookie 文件路径（%LOCALAPPDATA%\\BiliLearn\\Data\\bilibili_cookies.json）。没装就留空——扫码登录或自动探测本机浏览器就够啦。",
         )
         login_private_only: bool = Field(
             default=True,
@@ -226,7 +226,7 @@ class BiliSharerConfig(BaseConfig):
 
         enabled: bool = Field(
             default=True,
-            description="要不要让 bili_video_material / bili_search_videos 真的干活呀？默认开：Bot 可以直接查素材、搜 B 站视频。关掉的话两个工具还在列表里，但被调用只会回一句「未启用」哦。",
+            description="要不要让 bili_video_material / bili_search_videos / bili_send_video / bili_login 真的干活呀？默认开：Bot 能查素材、搜视频、发视频、扫码登录。关掉后工具仍在列表里，被调用只会回一句「未启用」哦。",
         )
 
     @config_section("opinion", title="点评设置", description="推荐语与点评行为配置")

@@ -3,6 +3,14 @@
 > 历史版本的全部条目。
 
 
+### v1.2.5（2026-10-20）
+
+- **修复：扫码登录拿不到 SESSDATA**。B 站 2026 年改版后，`qrcode/poll` 成功返回的 `url` 只带跨域 `ticket`，不再直接带 Cookie；需要再请求 `crossDomain`（`passport.biligame.com/x/passport-login/web/crossDomain` 等三个地址按序尝试）并从 `Set-Cookie` 收 `SESSDATA` / `bili_jct` / `DedeUserID`。`bilibili_api.login_v2` 仍然只做 URL 拆分，所以旧实现「手机提示成功、`get_credential()` 却是空凭据」。
+- 新增 `services/bili_login_flow.py`：自己实现 `generate → poll → 换票`，全程复用同一个 httpx 会话（buvid 等会话 cookie 才串得起来）；保留「老流程 URL 直接带 Cookie」「`cookie_info` 结构化兜底」两条快路径。
+- `bili_login` 改为使用该模块；轮询状态按 86101/86090/86038/0 判定，失败文案区分「过期」「没换到 SESSDATA」「保存失败」。
+- URL 查询串**不再做 URL 解码**：`SESSDATA` 里的 `%2C` 必须保留，否则 Cookie 头里的逗号会被当成分隔符。
+- **真机验证（2026-10-20 17:21）**：扫码确认 → `换票成功（passport.biligame.com）` → 拿到 `sessdata / bili_jct / buvid3 / dedeuserid` → 凭据落盘、`get_self_info` 回显昵称，登录态立即生效。
+
 ### v1.2.4（2026-10-20）
 
 - **新增 `bili_login` 扫码登录工具**：`QrCodeLogin(WEB)` 生成二维码 → `send_image` 发到当前会话 → 每 2 秒轮询 `check_state`（SCAN 提示已扫码 / CONF 提示确认中 / TIMEOUT 提示重来）→ 成功后把 sessdata / bili_jct / buvid3 / DedeUserID / ac_time_value 写入 `data/bilibili_sharer/credentials.json`（0600），并尝试用 `user.get_self_info` 回报昵称。凭据每次现读，**写完立即生效，不用重启**。

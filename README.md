@@ -15,12 +15,12 @@
 
 ## 快速开始
 
-1. **安装**：市场里点安装，或把 `bilibili_sharer-1.2.4.mfp` 放进 `plugins/` 目录
+1. **安装**：市场里点安装，或把 `bilibili_sharer-1.2.5.mfp` 放进 `plugins/` 目录
 2. **配置目标**：编辑 `config/plugins/bilibili_sharer/config.toml`，在 `[[sender.targets]]` 里填 `type`（`group`/`private`）与 `id`（群号/QQ 号）
 3. **重启 Bot**（插件与配置都不热加载）
 
 > ⚠️ **模型**：`[filter].model_name` / `[builder].model_name` 默认 `utils`（框架任务名，一般不用改）。想指定具体模型就填本机 `config/model.toml` 里的模型名；取不到模型时过滤会 fail-open（跳过判断、一律放行）。
-> 📄 **字幕 / 高清**：B 站字幕与高清画质需要登录态。**最简单：私聊 Bot 说「登录B站」，它会发一张二维码，手机 B 站扫一下就好**（凭据存 `data/bilibili_sharer/credentials.json`，立即生效、不用重启、不用改配置）。不想扫码也行：插件会自动探测本机 Edge / Chrome / Firefox 或 B 站桌面客户端里的登录 Cookie（`[bili_credential].auto_detect`，默认开）；装了 BiliLearn 的还可以填 `bililearn_cookie_file`。全都没有也能用，只是没字幕（自动走弹幕/评论或语音转写）。
+> 📄 **字幕 / 高清**：B 站字幕与高清画质需要登录态。**最简单：私聊 Bot 说「登录B站」，它会发一张二维码，手机 B 站扫一下就好**（已实测可用：扫码确认后自动换票拿凭据，存 `data/bilibili_sharer/credentials.json`，立即生效、不用重启、不用改配置）。不想扫码也行：插件会自动探测本机 Edge / Chrome / Firefox 或 B 站桌面客户端里的登录 Cookie（`[bili_credential].auto_detect`，默认开）；装了 BiliLearn 的还可以填 `bililearn_cookie_file`。全都没有也能用，只是没字幕（自动走弹幕/评论或语音转写）。
 
 
 ## 最小配置示例
@@ -90,6 +90,13 @@ interests = ["游戏", "科技"]
 | [完整变更记录](docs/changelog-full.md) | 历史版本全部条目 |
 
 ## 变更记录
+
+### v1.2.5（2026-10-20）
+
+- **修复扫码登录「手机说成功、凭据是空的」**：B 站把扫码后的发券拆成了两步——轮询返回的是带 `ticket` 的跨域地址，要再访问一次、从 `Set-Cookie` 里才拿得到 `SESSDATA`。旧实现沿用了 `bilibili_api` 的「拆 URL」逻辑，于是取到空凭据（2026-10-20 真机复现）。
+- 登录流程改为插件自己走：`generate → poll → 换票（crossDomain）`，全程同一会话；老流程（URL 里直接带 Cookie）、结构化 `cookie_info` 兜底都保留。
+- 失败时日志只记「走到了哪一步、拿到哪些 cookie 名」，绝不写值；真拿不到 `SESSDATA` 时会如实说明接口又变了。
+- **2026-10-20 真机验证**：扫码确认后 `[登录] 换票成功（passport.biligame.com）`，拿到 `sessdata / bili_jct / buvid3 / dedeuserid` 四项，凭据落盘、昵称回显正常。
 
 ### v1.2.4（2026-10-20）
 

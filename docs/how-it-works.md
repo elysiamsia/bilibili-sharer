@@ -81,7 +81,7 @@
 
 1. `[bili_credential]` 的五个字段（手填最优先，一般用不上）
 2. `bililearn_cookie_file`（有 BiliLearn 的人可用；没有就留空）
-3. **扫码登录记录** `data/bilibili_sharer/credentials.json`——私聊 Bot 说「登录B站」，`bili_login` 生成二维码发到会话里，手机 B 站扫码确认后写入；SESSDATA 一落盘，素材/点评/下载/发视频四条链路立刻用上，**不用重启**
+3. **扫码登录记录** `data/bilibili_sharer/credentials.json`——私聊 Bot 说「登录B站」，`bili_login` 生成二维码发到会话里，手机 B 站扫码确认后写入；SESSDATA 一落盘，素材/点评/下载/发视频四条链路立刻用上，**不用重启**。扫码流程自己走（`generate → poll → crossDomain 换票`）：2026 年 B 站把发券拆成两步，轮询只给 `ticket`，要再访问一次换票地址、从 `Set-Cookie` 里收凭据
 4. **本机浏览器 / 客户端 Cookie**（`auto_detect=true` 时）：Edge / Chrome / Brave / Vivaldi / Firefox 与 B 站桌面客户端，只读 `*.bilibili.com` 的几个字段
    - Chromium 系：`Local State` 里 DPAPI 保护的 AES 密钥 → `v10` 前缀的 AES-GCM 密文；`v20`（Chrome 127+ 的 App-Bound 加密）明确跳过
    - 浏览器运行时会**独占 Cookie 库**（实测 Edge 连只读都打不开）→ 记录「浏览器正在运行」并提示改用扫码
